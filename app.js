@@ -156,6 +156,7 @@ function score(d) {
   }
   if (d.spring) { s += 5; reasons.push("接近大潮，水流較活"); }
   if (d.offshore) { s -= 8; reasons.push("外海離島，風浪影響比近岸大"); }
+  if (v >= 17.2 || g >= 24.5 || (w != null && w >= 4)) { s = Math.min(s, 10); reasons.push("颱風等級風浪，請勿出海"); }
 
   s = Math.max(0, Math.min(100, Math.round(s)));
   let level = "bad", label = "不建議出海";
@@ -184,6 +185,63 @@ async function getJSON(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error("HTTP " + res.status);
   return res.json();
+}
+
+// 颱風／強風警戒（以預報推估，並非官方警報）
+// 風力級數對照：6 級 10.8 m/s、7 級 13.9、8 級 17.2（颱風等級）
+function alertLevel(d) {
+  const reasons = [];
+  let lv = 0;
+  const up = (n, text) => { if (n > lv) lv = n; reasons.push(text); };
+  if (d.wind >= 17.2) up(3, "平均風達 " + d.wind.toFixed(1) + " m/s（8 級以上，颱風等級）");
+  else if (d.wind >= 13.9) up(2, "平均風達 " + d.wind.toFixed(1) + " m/s（7 級強風）");
+  else if (d.wind >= 10.8) up(1, "平均風達 " + d.wind.toFixed(1) + " m/s（6 級強風）");
+  if (d.gust >= 24.5) up(3, "陣風可達 " + d.gust.toFixed(0) + " m/s（10 級以上）");
+  else if (d.gust >= 20.8) up(2, "陣風可達 " + d.gust.toFixed(0) + " m/s（9 級）");
+  else if (d.gust >= 17.2) up(1, "陣風可達 " + d.gust.toFixed(0) + " m/s（8 級）");
+  if (d.wave != null) {
+    if (d.wave >= 4) up(3, "浪高達 " + d.wave.toFixed(1) + " m（巨浪）");
+    else if (d.wave >= 3) up(2, "浪高達 " + d.wave.toFixed(1) + " m（大浪）");
+    else if (d.wave >= 2.5) up(1, "浪高達 " + d.wave.toFixed(1) + " m");
+  }
+  if (d.swell && d.swell.p >= 12 && d.swell.h >= 1.5) up(2, "長週期湧浪（" + d.swell.p.toFixed(0) + " 秒）可能是颱風外圍傳來");
+  else if (d.swell && d.swell.p >= 10 && d.swell.h >= 1.0) up(1, "出現長週期湧浪（" + d.swell.p.toFixed(0) + " 秒）");
+  return { lv, reasons };
+}
+
+function renderTyphoonAlert(days) {
+  const info = days.map((d) => alertLevel(d));
+  let worst = 0, wi = 0;
+  info.forEach((a, i) => { if (a.lv > worst) { worst = a.lv; wi = i; } });
+  const names = ["綠", "黃", "橘", "紅"];
+  const titles = [
+    "目前預報未見颱風級強風浪",
+    "留意：未來 7 天出現較強風浪",
+    "警戒：預報出現強風大浪，疑似颱風或強烈季風影響",
+    "危險：預報出現颱風等級風浪，請勿出海"
+  ];
+  const d = days[wi];
+  const dayTxt = (d.dt.getMonth() + 1) + "/" + d.dt.getDate() + "（週" + WEEK[d.dt.getDay()] + "）";
+  const detail = worst > 0
+    ? "最嚴重的一天是 " + dayTxt + "：" + info[wi].reasons.join("；") + "。"
+    : "未來 7 天的風速、陣風、浪高與湧浪都沒有達到颱風或強風的水準。";
+  $("typhoon-alert").className = "card alert alert-" + worst;
+  $("typhoon-alert").innerHTML =
+    '<h2><span class="alert-dot"></span>颱風・強風警戒（' + names[worst] + "）</h2>" +
+    '<p class="alert-title">' + titles[worst] + "</p>" +
+    "<p>" + detail + "</p>" +
+    '<p class="alert-links">' +
+      '<a href="https://www.cwa.gov.tw/V8/C/P/Typhoon/TY_NEWS.html" target="_blank" rel="noopener">中央氣象署・颱風消息</a>' +
+      '<a href="https://www.cwa.gov.tw/V8/C/P/Warning/FIFOWS.html" target="_blank" rel="noopener">天氣警特報</a>' +
+      '<a href="https://alerts.ncdr.nat.gov.tw/" target="_blank" rel="noopener">災防告警</a></p>' +
+    '<p class="alert-note">此為依預報數據推估的提醒，<strong>不是官方警報</strong>。若中央氣象署發布海上颱風警報或海上陸上颱風警報，請勿出海，船隻應依規定回港避風。</p>';
+  $("typhoon-alert").classList.remove("hidden");
+  // 日曆上標示有警戒的日子
+  document.querySelectorAll(".cal-cell").forEach((b) => {
+    const a = info[Number(b.dataset.i)];
+    if (a && a.lv >= 2) b.insertAdjacentHTML("beforeend", '<span class="cal-warn" title="颱風・強風警戒">🌀</span>');
+  });
+  days.forEach((day, i) => { day.alert = info[i]; });
 }
 
 // 日釣／夜釣：依季節給基本傾向，再用當天日夜風浪修正
@@ -530,6 +588,7 @@ async function init() {
     const days = buildDays(wx, mr, spot);
     renderNow(wx, mr);
     renderCalendar(days);
+    renderTyphoonAlert(days);
     renderDays(days);
     renderCharts(wx, mr);
     select(days, 0);

@@ -25,6 +25,8 @@
 
     <div id="status" class="status" role="status">正在取得最新氣象與海況…</div>
 
+    <section id="typhoon-alert" class="card alert hidden" role="alert"></section>
+
     <section id="calendar" class="card hidden" aria-labelledby="cal-title">
       <h2 id="cal-title">出海日曆</h2>
       <p id="cal-summary" class="cal-summary"></p>
@@ -75,6 +77,7 @@
         <li><strong>風速</strong>：平均風超過 8 m/s（約 5 級）會明顯影響船隻穩定與拋竿。</li>
         <li><strong>降雨機率</strong>與<strong>陣風</strong>會再扣分；大小潮（新月・滿月前後）流速較強，略有加分。</li>
         <li><strong>湧浪</strong>是遠方風暴或颱風傳來的長週期浪（週期 10 秒以上能量大）。北海岸面向北方，來自西北到東方的湧浪都會迎面打來；湧浪風險高時扣 15 分、中等扣 6 分。颱風外圍即使當地無風，也可能有危險的湧浪。</li>
+        <li><strong>颱風・強風警戒</strong>依 7 天預報的風速、陣風、浪高與長週期湧浪推估（黃、橘、紅三級）；風速達 8 級（17.2 m/s）、陣風 10 級或浪高 4 m 以上，該日分數直接壓到 10 分以下。</li>
         <li>基隆嶼為外海離島，風浪影響較大，分數會額外扣 8 分。</li>
         <li>評分僅為輔助參考，<strong>實際出海請以中央氣象署海上警報及船長判斷為準</strong>。</li>
       </ul>
