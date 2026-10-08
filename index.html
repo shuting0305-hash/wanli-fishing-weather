@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>萬里釣魚氣象站</title>
+  <meta name="description" content="新北市萬里、野柳、基隆嶼海釣船釣氣象追蹤：天氣、浪高、海溫、潮汐、月相、魚種與釣魚適合度評分。">
+  <link rel="icon" href="images/wave.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">新北市萬里區・海釣船釣</p>
+      <h1>萬里釣魚氣象站</h1>
+      <p class="sub" id="updated">資料載入中…</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <nav class="card spot-bar" aria-label="切換釣點">
+      <div id="spots" class="spots"></div>
+      <p id="spot-note" class="spot-note"></p>
+    </nav>
+
+    <div id="status" class="status" role="status">正在取得最新氣象與海況…</div>
+
+    <section id="calendar" class="card hidden" aria-labelledby="cal-title">
+      <h2 id="cal-title">出海日曆</h2>
+      <p id="cal-summary" class="cal-summary"></p>
+      <div id="cal-grid" class="cal-grid"></div>
+      <p class="legend"><span class="dot good"></span>適合出海　<span class="dot ok"></span>留意海況　<span class="dot bad"></span>不建議出海</p>
+    </section>
+
+    <section id="now" class="card hidden" aria-labelledby="now-title">
+      <h2 id="now-title">此刻海況</h2>
+      <div class="now-grid" id="now-grid"></div>
+    </section>
+
+    <section id="forecast" class="hidden" aria-labelledby="fc-title">
+      <h2 id="fc-title">未來 7 天釣魚適合度</h2>
+      <p class="hint">點選任一天查看詳細資訊</p>
+      <div class="days" id="days"></div>
+    </section>
+
+    <section id="detail" class="card hidden" aria-live="polite"></section>
+
+    <section id="charts" class="card hidden" aria-labelledby="chart-title">
+      <h2 id="chart-title">浪高・風速趨勢圖</h2>
+      <div id="chart-wave" class="chart"></div>
+      <div id="chart-wind" class="chart"></div>
+    </section>
+
+    <section class="card" aria-labelledby="fish-title">
+      <h2 id="fish-title">本月（<span id="fish-month"></span>）常見魚種</h2>
+      <div id="fish-now" class="fish-grid"></div>
+      <details class="fish-all">
+        <summary>看四季魚種總覽</summary>
+        <ul id="fish-all"></ul>
+      </details>
+      <p class="credit">魚種為北部海域的一般性參考，實際魚況每年、每個釣點都不同，建議向船家確認。</p>
+    </section>
+
+    <section class="card note">
+      <h2>評分怎麼算？</h2>
+      <ul>
+        <li><strong>浪高</strong>是船釣最重要的條件：1 公尺以下最佳，超過 2 公尺不建議出海。</li>
+        <li><strong>風速</strong>：平均風超過 8 m/s（約 5 級）會明顯影響船隻穩定與拋竿。</li>
+        <li><strong>降雨機率</strong>與<strong>陣風</strong>會再扣分；大小潮（新月・滿月前後）流速較強，略有加分。</li>
+        <li>基隆嶼為外海離島，風浪影響較大，分數會額外扣 8 分。</li>
+        <li>評分僅為輔助參考，<strong>實際出海請以中央氣象署海上警報及船長判斷為準</strong>。</li>
+      </ul>
+      <p class="credit">資料來源：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（天氣與海洋模式預報，潮位為模式推估，與實際潮汐表可能有數十分鐘誤差）。</p>
+    </section>
+  </main>
+
+  <footer class="foot">萬里釣魚氣象站・安全第一，穿好救生衣</footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

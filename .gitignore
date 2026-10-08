@@ -1,0 +1,13 @@
+# 機密與套件
+.env
+.env.*
+*.key
+node_modules/
+
+# 只公開釣魚氣象網站：先全部排除，再開放需要的檔案
+/*
+!/.gitignore
+!/index.html
+!/style.css
+!/app.js
+!/images/
