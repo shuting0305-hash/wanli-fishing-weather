@@ -141,6 +141,10 @@ h2 { font-size: 1.15rem; margin: 0 0 12px; }
 .legend { margin: 12px 0 0; font-size: .85rem; color: var(--muted); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: baseline; }
 
+.swell { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--line); }
+.swell h2 .badge { font-size: .75rem; vertical-align: middle; margin: 0 0 0 6px; }
+.swell-advice { margin: 10px 0 0; padding: 10px 12px; background: var(--bg); border-radius: 10px; font-size: .92rem; }
+
 .chart { margin-bottom: 14px; }
 .chart-read { font-size: .85rem; color: var(--muted); min-height: 1.4em; }
 .chart svg { width: 100%; height: auto; display: block; touch-action: pan-y; }

@@ -38,15 +38,17 @@ const SEASONS = [
 function weatherUrl(s) {
   return "https://api.open-meteo.com/v1/forecast?latitude=" + s.lat + "&longitude=" + s.lon +
     "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m" +
-    "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max" +
+    "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,sunrise,sunset" +
     "&hourly=wind_speed_10m&wind_speed_unit=ms&timezone=Asia%2FTaipei&forecast_days=7";
 }
 
 function marineUrl(s) {
   return "https://marine-api.open-meteo.com/v1/marine?latitude=" + s.seaLat + "&longitude=" + s.seaLon +
-    "&current=wave_height,wave_direction,wave_period,sea_surface_temperature" +
-    "&hourly=sea_level_height_msl,wave_height" +
-    "&daily=wave_height_max,wave_period_max&timezone=Asia%2FTaipei&forecast_days=7";
+    "&current=wave_height,wave_direction,wave_period,sea_surface_temperature," +
+      "swell_wave_height,swell_wave_period,swell_wave_direction,wind_wave_height,wind_wave_period" +
+    "&hourly=sea_level_height_msl,wave_height,swell_wave_height" +
+    "&daily=wave_height_max,wave_period_max,swell_wave_height_max,swell_wave_period_max," +
+      "swell_wave_direction_dominant,wind_wave_height_max&timezone=Asia%2FTaipei&forecast_days=7";
 }
 
 const $ = (id) => document.getElementById(id);
@@ -96,6 +98,36 @@ function moonInfo(age) {
   return { icon: p[1], name: p[2], spring: fromSpring <= 2 };
 }
 
+// 湧浪分析：湧浪是遠方風暴或颱風傳來的長週期浪，週期越長能量越大
+function compass16(deg) {
+  const n = ["北", "北北東", "東北", "東北東", "東", "東南東", "東南", "南南東",
+    "南", "南南西", "西南", "西南西", "西", "西北西", "西北", "北北西"];
+  return n[Math.round(deg / 22.5) % 16];
+}
+
+function swellAnalysis(h, p, dir, windWave) {
+  if (h == null || p == null) return null;
+  const exposed = dir == null ? true : (dir >= 292.5 || dir <= 112.5); // 北向海岸：西北經北到東為迎浪
+  let type = "短週期（偏風浪）";
+  if (p >= 10) type = "長週期湧浪";
+  else if (p >= 7) type = "中等週期湧浪";
+  let risk = 0; // 0 低 1 中 2 高
+  if ((p >= 10 && h >= 1.0) || h >= 2.0) risk = 2;
+  else if ((p >= 8 && h >= 0.7) || h >= 1.2) risk = 1;
+  if (!exposed && risk > 0) risk -= 1;
+  const share = windWave != null && (h + windWave) > 0 ? Math.round(h / (h + windWave) * 100) : null;
+  const levels = ["低", "中", "高"];
+  let advice;
+  if (risk === 2) advice = "湧浪能量大，港口與礁岸的浪可能比預報浪高更危險，建議避免出海。";
+  else if (risk === 1) advice = "有一定湧浪，船身會有規律的大起伏，容易暈船，出港口與過礁區請特別小心。";
+  else if (p >= 10) advice = "雖然湧浪不高，但週期長，岸邊礁石與港口外仍可能有突然的大浪。";
+  else advice = "湧浪影響有限，海況以當地風浪為主。";
+  return {
+    h, p, dir, type, exposed, risk, riskText: levels[risk], share, advice,
+    dirText: dir == null ? "—" : compass16(dir) + "向（" + Math.round(dir) + "°）"
+  };
+}
+
 // 釣魚適合度（船釣）：0–100
 function score(d) {
   let s = 100;
@@ -118,6 +150,10 @@ function score(d) {
   if (r >= 70) { s -= 20; reasons.push("降雨機率 " + r + "%"); }
   else if (r >= 40) { s -= 8; reasons.push("降雨機率 " + r + "%"); }
 
+  if (d.swell) {
+    if (d.swell.risk === 2) { s -= 15; reasons.push("湧浪風險高（週期 " + d.swell.p.toFixed(0) + " 秒）"); }
+    else if (d.swell.risk === 1) { s -= 6; reasons.push("有明顯湧浪（週期 " + d.swell.p.toFixed(0) + " 秒）"); }
+  }
   if (d.spring) { s += 5; reasons.push("接近大潮，水流較活"); }
   if (d.offshore) { s -= 8; reasons.push("外海離島，風浪影響比近岸大"); }
 
@@ -150,6 +186,70 @@ async function getJSON(url) {
   return res.json();
 }
 
+// 日釣／夜釣：依季節給基本傾向，再用當天日夜風浪修正
+const NIGHT_GUIDE = [
+  { months: [3, 4, 5], season: "春季", day: 3, night: 2,
+    headline: "以日釣為主，夜釣視天氣",
+    detail: "春季軟絲、石斑與鬼頭刀多在白天至黃昏有口；夜間仍偏涼，5 月起小卷開始，可嘗試夜間燈火釣。" },
+  { months: [6, 7, 8, 9], season: "夏季", day: 2, night: 3,
+    headline: "夜釣首選，日釣挑清晨與傍晚",
+    detail: "白天日曬強、午後常有雷陣雨，中午魚口也較差；夜間涼爽，小卷燈火釣正好，白天建議只釣清晨與傍晚。" },
+  { months: [10, 11], season: "秋季", day: 3, night: 3,
+    headline: "日夜皆宜，視風浪選擇",
+    detail: "白帶魚與花腹鯖夜釣開始有口，白天紅甘、軟絲也有機會；但東北季風漸強，請以當天風浪決定日夜。" },
+  { months: [12, 1, 2], season: "冬季", day: 3, night: 2,
+    headline: "以日釣為主，夜釣僅限白帶魚且需保暖",
+    detail: "東北季風強，夜間風大濕冷、浪也較大；白天相對溫暖安全。想釣白帶魚才考慮夜釣，並務必做好保暖與救生裝備。" }
+];
+
+function nightGuide(month) {
+  return NIGHT_GUIDE.find((g) => g.months.includes(month)) || NIGHT_GUIDE[0];
+}
+
+function stars(n) { return "★".repeat(n) + "☆".repeat(3 - n); }
+
+// 取某一天白天(06–18)與夜間(18–隔天06)的最大風速／浪高
+function dayNight(wx, mr, date, month) {
+  const next = new Date(new Date(date + "T12:00:00+08:00").getTime() + 86400000);
+  const nextDate = next.toLocaleDateString("sv-SE", { timeZone: "Asia/Taipei" });
+  const res = { day: { wind: null, wave: null }, night: { wind: null, wave: null } };
+  const scan = (times, vals, key) => {
+    if (!times || !vals) return;
+    times.forEach((t, k) => {
+      const v = vals[k];
+      if (v == null) return;
+      const d = t.slice(0, 10), h = Number(t.slice(11, 13));
+      let part = null;
+      if (d === date && h >= 6 && h < 18) part = "day";
+      else if ((d === date && h >= 18) || (d === nextDate && h < 6)) part = "night";
+      if (part && (res[part][key] == null || v > res[part][key])) res[part][key] = v;
+    });
+  };
+  scan(wx.hourly.time, wx.hourly.wind_speed_10m, "wind");
+  scan(mr && mr.hourly && mr.hourly.time, mr && mr.hourly && mr.hourly.wave_height, "wave");
+  const ok = (p) => (p.wind == null || p.wind <= 8) && (p.wave == null || p.wave <= 1.5);
+  const g = nightGuide(month);
+  const dayOk = ok(res.day), nightOk = ok(res.night);
+  let pick, why;
+  if (dayOk && nightOk) {
+    pick = g.night > g.day ? "夜釣" : (g.day > g.night ? "日釣" : "日夜皆可");
+    why = "日夜海況都在可釣範圍，依季節傾向建議" + (pick === "日夜皆可" ? "兩者皆可。" : pick + "。");
+  } else if (dayOk) { pick = "日釣"; why = "夜間風浪偏大，建議改在白天出海。"; }
+  else if (nightOk) { pick = "夜釣"; why = "白天風浪偏大、夜間相對平穩，若要出海以夜間為主，但夜釣風險較高請特別小心。"; }
+  else {
+    const hard = (p) => (p.wind != null && p.wind > 10) || (p.wave != null && p.wave > 2.0);
+    if (hard(res.day) && hard(res.night)) { pick = "都不建議"; why = "白天與夜間風浪都很大，建議改期。"; }
+    else {
+      const score = (p) => (p.wind || 0) / 8 + (p.wave || 0) / 1.5;
+      const better = score(res.day) <= score(res.night) ? "白天" : "夜間";
+      pick = better === "白天" ? "日釣（需謹慎）" : "夜釣（需謹慎）";
+      why = "日夜風浪都略偏大，若要出海建議選" + better + "相對較平穩的時段，並隨時準備提早回港。";
+    }
+  }
+  res.pick = pick; res.why = why;
+  return res;
+}
+
 function buildDays(wx, mr, spot) {
   const days = [];
   const tides = mr && mr.hourly ? findTides(mr.hourly.time, mr.hourly.sea_level_height_msl) : [];
@@ -166,8 +266,16 @@ function buildDays(wx, mr, spot) {
       gust: wx.daily.wind_gusts_10m_max[i],
       wave: mr && mr.daily ? mr.daily.wave_height_max[i] : null,
       period: mr && mr.daily ? mr.daily.wave_period_max[i] : null,
+      windWave: mr && mr.daily && mr.daily.wind_wave_height_max ? mr.daily.wind_wave_height_max[i] : null,
+      sunrise: wx.daily.sunrise ? wx.daily.sunrise[i].slice(11) : null,
+      sunset: wx.daily.sunset ? wx.daily.sunset[i].slice(11) : null,
+      dn: dayNight(wx, mr, date, Number(date.slice(5, 7))),
       spring: moon.spring,
       offshore: spot.offshore,
+      swell: mr && mr.daily && mr.daily.swell_wave_height_max
+        ? swellAnalysis(mr.daily.swell_wave_height_max[i], mr.daily.swell_wave_period_max[i],
+            mr.daily.swell_wave_direction_dominant[i], mr.daily.wind_wave_height_max[i])
+        : null,
       tides: tides.filter((x) => x.t.startsWith(date))
     };
     d.result = score(d);
@@ -187,6 +295,8 @@ function renderNow(wx, mr) {
     ["風", fmt(c.wind_speed_10m) + " m/s", windDir(c.wind_direction_10m) + "・" + beaufort(c.wind_speed_10m) + " 級"],
     ["陣風", fmt(c.wind_gusts_10m) + " m/s", ""],
     ["浪高", mc.wave_height != null ? fmt(mc.wave_height, 2) + " m" : "—", mc.wave_period != null ? "週期 " + fmt(mc.wave_period) + " 秒" : ""],
+    ["湧浪", mc.swell_wave_height != null ? fmt(mc.swell_wave_height, 2) + " m" : "—",
+      mc.swell_wave_period != null ? "週期 " + fmt(mc.swell_wave_period) + " 秒・" + compass16(mc.swell_wave_direction) + "向" : ""],
     ["海水溫", mc.sea_surface_temperature != null ? fmt(mc.sea_surface_temperature) + "°C" : "—", ""],
     ["月相", moon.icon + " " + moon.name, moon.spring ? "大潮期" : "小潮期"]
   ];
@@ -209,6 +319,50 @@ function renderDays(days) {
   $("forecast").classList.remove("hidden");
   $("days").querySelectorAll(".day").forEach((b) =>
     b.addEventListener("click", () => select(days, Number(b.dataset.i))));
+}
+
+function dayNightPanel(d) {
+  const x = d.dn;
+  const f = (p, label) => '<div class="stat"><div class="label">' + label + "</div><div class=\"value\">風 " +
+    fmt(p.wind) + " m/s</div><div class=\"small\">浪 " + (p.wave != null ? fmt(p.wave, 2) + " m" : "—") + "</div></div>";
+  return '<div class="swell">' +
+    "<h2>日釣／夜釣建議：" + x.pick + "</h2>" +
+    '<div class="now-grid">' +
+      '<div class="stat"><div class="label">日出</div><div class="value">🌅 ' + (d.sunrise || "—") + "</div></div>" +
+      '<div class="stat"><div class="label">日落</div><div class="value">🌇 ' + (d.sunset || "—") + "</div></div>" +
+      f(x.day, "白天最大（06–18）") + f(x.night, "夜間最大（18–06）") +
+    "</div>" +
+    '<p class="swell-advice">' + x.why + "　日出後與日落前後各約 1–2 小時，通常是魚口較好的時段。</p></div>";
+}
+
+function renderSeasonGuide() {
+  const g = nightGuide(new Date().getMonth() + 1);
+  $("night-guide").innerHTML =
+    '<div class="now-grid">' +
+      '<div class="stat"><div class="label">日釣</div><div class="value">☀️ ' + stars(g.day) + "</div></div>" +
+      '<div class="stat"><div class="label">夜釣</div><div class="value">🌙 ' + stars(g.night) + "</div></div>" +
+    "</div>" +
+    '<p class="swell-advice"><strong>' + g.season + "：" + g.headline + "。</strong>" + g.detail + "</p>";
+  $("night-season").textContent = g.season;
+}
+
+function swellPanel(d) {
+  const w = d.swell;
+  if (!w) return "";
+  const cls = ["good", "ok", "bad"][w.risk];
+  return '<div class="swell">' +
+    '<h2>湧浪分析 <span class="badge ' + cls + '">風險' + w.riskText + "</span></h2>" +
+    '<div class="now-grid">' +
+      '<div class="stat"><div class="label">湧浪高</div><div class="value">' + fmt(w.h, 2) + " m</div>" +
+        '<div class="small">' + (w.share != null ? "占總浪高約 " + w.share + "%" : "") + "</div></div>" +
+      '<div class="stat"><div class="label">湧浪週期</div><div class="value">' + fmt(w.p) + " 秒</div>" +
+        '<div class="small">' + w.type + "</div></div>" +
+      '<div class="stat"><div class="label">來向</div><div class="value">' + w.dirText + "</div>" +
+        '<div class="small">' + (w.exposed ? "正對北海岸（迎浪）" : "斜向或背向，影響較小") + "</div></div>" +
+      '<div class="stat"><div class="label">風浪高</div><div class="value">' + fmt(d.windWave, 2) + " m</div>" +
+        '<div class="small">當地風吹起的浪</div></div>' +
+    "</div>" +
+    '<p class="swell-advice">' + w.advice + "</p></div>";
 }
 
 function select(days, i) {
@@ -234,6 +388,8 @@ function select(days, i) {
       '<div class="stat"><div class="label">最大浪高</div><div class="value">' + fmt(d.wave, 2) + " m</div><div class=\"small\">週期 " + fmt(d.period) + " 秒</div></div>" +
       '<div class="stat"><div class="label">月相</div><div class="value">' + d.moon.icon + " " + d.moon.name + "</div><div class=\"small\">" + (d.spring ? "大潮期" : "小潮期") + "</div></div>" +
     "</div>" +
+    swellPanel(d) +
+    dayNightPanel(d) +
     '<h2 style="margin-top:16px">潮汐（模式推估）</h2><div class="tides">' + tideHtml + "</div>";
   $("detail").classList.remove("hidden");
 }
@@ -321,6 +477,9 @@ function renderCharts(wx, mr) {
   lineChart($("chart-wave"), mr && mr.hourly && mr.hourly.wave_height ? mr.hourly.time : [],
     mr && mr.hourly && mr.hourly.wave_height ? mr.hourly.wave_height : [],
     { title: "浪高趨勢（7 天逐時）", label: "浪高", unit: "m", color: "#0b8fb3", threshold: 1.5, thresholdLabel: "1.5 m 留意線" });
+  lineChart($("chart-swell"), mr && mr.hourly && mr.hourly.swell_wave_height ? mr.hourly.time : [],
+    mr && mr.hourly && mr.hourly.swell_wave_height ? mr.hourly.swell_wave_height : [],
+    { title: "湧浪高度趨勢（7 天逐時）", label: "湧浪高", unit: "m", color: "#6b6fd6", threshold: 1.0, thresholdLabel: "1.0 m 留意線" });
   lineChart($("chart-wind"), wx.hourly.time, wx.hourly.wind_speed_10m,
     { title: "風速趨勢（7 天逐時）", label: "風速", unit: "m/s", color: "#2f9e8f", threshold: 8, thresholdLabel: "8 m/s 偏強線" });
   $("charts").classList.remove("hidden");
@@ -390,4 +549,5 @@ async function init() {
 
 window.addEventListener("hashchange", init);
 renderFish();
+renderSeasonGuide();
 init();
